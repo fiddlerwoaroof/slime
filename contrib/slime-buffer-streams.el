@@ -12,6 +12,12 @@
   (slime-buffer-streams--get-target-marker name)
   `(:stream-target-created ,thread ,name))
 
+(defslimefun slime-open-target-other-window (name)
+  (switch-to-buffer-other-window
+   (marker-buffer (slime-buffer-streams--get-target-marker name)))
+  (select-window (get-mru-window nil t t))
+  nil)
+
 (defun slime-buffer-streams--get-target-name (target)
   (format "*slime-target %s*" target))
 
