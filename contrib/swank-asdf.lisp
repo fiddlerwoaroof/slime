@@ -331,19 +331,29 @@ install a recent release of ASDF and in your ~~/.swank.lisp specify:
 (recompute-pathname-component-table)
 
 ;;; This is a crude hack, see ASDF's LP #481187.
-(defslimefun who-depends-on (system)
-  (flet ((system-dependencies (op system)
-           (mapcar (lambda (dep)
-                     (asdf::coerce-name (if (consp dep) (second dep) dep)))
-                   (cdr (assoc op (asdf:component-depends-on op system))))))
-    (let ((system-name (asdf::coerce-name system))
-          (result))
-      (asdf::map-systems
-       (lambda (system)
-         (when (member system-name
-                       (system-dependencies 'asdf:load-op system)
-                       :test #'string=)
-           (push (asdf:component-name system) result))))
+(defslimefun who-depends-on (sys)
+  (let ((system-name (asdf:coerce-name sys))
+        (result))
+    (labels ((resolve-dependency (system it)
+               (handler-bind ((warning #'muffle-warning))
+                 (handler-case
+                     (let ((result (asdf/find-component:resolve-dependency-spec system it)))
+                       (when result
+                         (asdf:component-name result)))
+                   (error ()))))
+             (manipulate-system (system)
+               (when (member system-name
+                             (mapcar (lambda (dep)
+                                       (resolve-dependency system dep))
+                                     (asdf:system-depends-on system))
+                             :test #'string=)
+                 (push (asdf:component-name system)
+                       result))))
+      (mapcar (lambda (name)
+                (manipulate-system
+                 (asdf:find-system
+                  name)))
+              (asdf:registered-systems))
       result)))
 
 (defmethod xref-doit ((type (eql :depends-on)) thing)
