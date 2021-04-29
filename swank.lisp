@@ -1041,7 +1041,7 @@ The processing is done in the extent of the toplevel restart."
            :new-package :new-features :ed :indentation-update
            :eval :eval-no-wait :background-message :inspect :ping
            :y-or-n-p :read-from-minibuffer :read-string :read-aborted :test-delay
-           :write-image :ed-rpc :ed-rpc-no-wait)
+           :write-image :write-clime :ed-rpc :ed-rpc-no-wait)
           &rest _)
          (declare (ignore _))
          (encode-message event (current-socket-io)))
