@@ -12,18 +12,33 @@
 
 (defun slime-dispatch-clime-event (event)
   (slime-dcase event
-    ((:write-clime svg-data)
+    ((:write-clime svg-data presentations)
      (with-current-buffer (slime-output-buffer)
        ;; Stolen mostly from slime-media.el, thanks Christophe!
-       (let ((marker (slime-repl-output-target-marker :repl-result))
-             (image (create-image svg-data 'svg t)))
+       (let ((marker (slime-repl-output-target-marker :repl-result)))
          (goto-char marker)
-         (insert-image image)
+         (insert-image (slime-create-clime-image svg-data presentations))
          (insert "\n")
          ;; Move the input-start marker after the REPL result.
          (set-marker marker (point))))
      t)
     (t nil)))
+
+(defun slime-create-clime-image (svg-data presentations)
+  (apply 'create-image svg-data 'svg t
+         :pointer 'hourglass
+         (slime-clime-presentations-map presentations)))
+
+(defun slime-clime-presentations-map (presentations)
+  (let ((res
+         (list :map
+               (mapcar (lambda (presentation)
+                         (cl-destructuring-bind (id area) presentation
+                           `(,area ,(gensym) (pointer hand help-echo "presentation!"))))
+                       presentations))))
+    (message "res = %S" res)
+    res))
+  
 
 (provide 'slime-clime)
 
