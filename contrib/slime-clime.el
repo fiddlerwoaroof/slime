@@ -17,28 +17,38 @@
        ;; Stolen mostly from slime-media.el, thanks Christophe!
        (let ((marker (slime-repl-output-target-marker :repl-result)))
          (goto-char marker)
-         (insert-image (slime-create-clime-image svg-data presentations))
+         (slime-clime-insert-image (copy-seq svg-data) presentations)
          (insert "\n")
          ;; Move the input-start marker after the REPL result.
          (set-marker marker (point))))
      t)
+    ((:accept-for-clime thread tag input-context)
+     (slime-clime-set-input-context input-context))
     (t nil)))
 
-(defun slime-create-clime-image (svg-data presentations)
-  (apply 'create-image svg-data 'svg t
-         :pointer 'hourglass
-         (slime-clime-presentations-map presentations)))
+(defun slime-clime-insert-image (svg-data presentations)
+  (let ((map (slime-clime-presentations-map presentations)))
+    (insert-image (slime-clime-create-image (copy-seq svg-data) map))
+    ))
+;;    (put-text-property (char-before) (point) 'slime-clime-connection (slime-connection))
+;;    (put-text-property (char-before) (point) 'slime-clime-presentation-map map)))
+
+(defun slime-clime-create-image (svg-data map)
+  (create-image svg-data 'svg t :map map))
 
 (defun slime-clime-presentations-map (presentations)
-  (let ((res
-         (list :map
-               (mapcar (lambda (presentation)
-                         (cl-destructuring-bind (id area) presentation
-                           `(,area ,(gensym) (pointer hand help-echo "presentation!"))))
-                       presentations))))
-    (message "res = %S" res)
-    res))
-  
+  "Return an image 'map' property for PRESENTATIONS."
+  (mapcar (lambda (presentation)
+            (cl-destructuring-bind (id area tooltip) presentation
+              `(,area ,(gensym) (pointer arrow help-echo ,tooltip))))
+          presentations))
+
+
+;;;; Input
+
+(defun slime-clime-set-input-context (slime-connection input-context)
+  "Set INPUT-CONTEXT for SLIME-CONNECTION.
+The input context is a list of presentation IDs ready for ACCEPT.")
 
 (provide 'slime-clime)
 
