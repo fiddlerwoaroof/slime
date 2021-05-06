@@ -31,10 +31,11 @@
 (defun slime-clime-insert-image (svg-data presentations)
   (let ((map (slime-clime-presentations-map presentations)))
     (insert-image (slime-clime-create-image svg-data map))
-    (put-text-property (char-before) (point)
-                       'slime-clime-connection (slime-connection))
-    (put-text-property (char-before) (point)
-                       'slime-clime-presentation-map map)))
+;;    (put-text-property (char-before) (point)
+;;                       'slime-clime-connection (slime-connection))
+;;    (put-text-property (char-before) (point)
+;;                       'slime-clime-presentation-map map)
+    ))
 
 (defun slime-clime-create-image (svg-data map)
   ;; Somehow create-image does not work properly when passed the image
