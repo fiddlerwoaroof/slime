@@ -1,5 +1,5 @@
 (defpackage swank/backend
-s  (:use cl)
+  (:use cl)
   (:nicknames swank-backend)
   (:export *debug-swank-backend*
            *log-output*
