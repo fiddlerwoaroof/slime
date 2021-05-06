@@ -1378,7 +1378,7 @@ entered nothing, returns NIL when user pressed C-g."
                                            ,prompt ,initial-value))
     (third (wait-for-event `(:emacs-return ,tag result)))))
 
-(defun accept-clime-presentation-in-emacs (acceptable-presentation-ids)
+(defun clime-accept-in-emacs (acceptable-presentation-ids)
   "Ask user to accept a CLIM presentation."
   (check-type acceptable-presentation-ids list)
   (dolist (id acceptable-presentation-ids)
