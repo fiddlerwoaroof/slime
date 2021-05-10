@@ -69,6 +69,16 @@ The input context is a list of presentation IDs ready for ACCEPT."
 ;;(defun slime-clime-map-images (fn)
 ;;  "Call FN with each CLIME image in all buffers in Emacs."
 
+
+;;;; Image information
 
+(defslimefun svg-image-size (svg-data)
+  (let ((image (cons 'image (list :type 'svg :data svg-data))))
+    (image-size image t)))
+
+(defslimefun window-width-for-margin ()
+  (window-body-width nil t))
+
+
 (provide 'slime-clime)
 
