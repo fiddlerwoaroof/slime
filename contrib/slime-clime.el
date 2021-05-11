@@ -1,5 +1,6 @@
 (eval-and-compile
-  (require 'slime))
+  (require 'slime)
+  (require 'text-property-search))
 
 (define-slime-contrib slime-clime
   "Display CLIM presentations in Emacs."
@@ -135,7 +136,7 @@ The input context is a list of presentation IDs ready for ACCEPT."
   "Filter active areas of IMAGE based on INPUT-CONTEXT."
   (let* ((all (image-property image 'slime-clime-presentations))
          (filtered (cl-remove-if-not (lambda (area)
-                                       (member (first area) input-context))
+                                       (member (car area) input-context))
                                      all)))
     (setf (image-property image :map) nil)
     (setf (image-property image :map)
