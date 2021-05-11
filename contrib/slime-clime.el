@@ -37,19 +37,15 @@
   (let* ((posn (second event))
          (image (posn-image posn))
          (area (posn-area posn)))
-    (when (and (slime-clime-input-context)
+    (when (and area
+               (slime-clime-input-context)
                (eq (slime-connection)
                    (image-property image 'slime-clime-connection)))
-      (slime-clime-accept area))))
+      (slime-clime-accept area)
+      (slime-clime-reset-input-context))))
 
 (defun slime-clime-accept (id)
-  (let ((index (cl-etypecase id
-                 (integer id)
-                 ;; HACK: string-trim to workaround mangling that's
-                 ;; happening converting IDs between numbers and
-                 ;; symbols -lg
-                 (symbol (cl-parse-integer (string-trim (symbol-name id)
-                                                        "[^0-9]" "[^0-9]"))))))
+  (let ((index (slime-clime-keyword-to-id id)))
     (cl-destructuring-bind (thread tag ctx) (slime-clime-input-context)
       (slime-dispatch-event `(:emacs-return ,thread ,tag ,index)))))
 
@@ -70,12 +66,22 @@
      t)
     (t nil)))
 
+(defun slime-clime-id-to-keyword (id)
+  (assert (and (integerp id) (>= id 0)))
+  (intern (format ":%d" id)))
+
+(defun slime-clime-keyword-to-id (id)
+  (assert (keywordp id))
+  (cl-parse-integer (substring (symbol-name id) 1))) ;
+
 (defun slime-clime-insert-image (svg-data presentations)
   (let* ((map (slime-clime-presentations-map presentations))
          (props (list 'slime-clime-presentations presentations
                       :map map
                       'slime-clime-connection (slime-connection))))
     (insert-image (slime-clime-create-image svg-data map props))
+    (put-text-property (1- (point)) (point)
+                       'slime-clime-connection (slime-connection))
     (put-text-property (1- (point)) (point)
                        'keymap slime-clime-image-keymap)))
 
@@ -84,16 +90,21 @@
   ;; data and map attributes directly. This is pure voodoo. Making a
   ;; fresh copy is the only reliable workaround I have been able to
   ;; find. -luke
-  (eval (append (read (let (print-length print-depth)
-                        (prin1-to-string `(create-image ,svg-data 'svg t :map ',map))))
+  (eval (append (slime-clime-reread `(create-image ,svg-data 'svg t :map ',map))
                 (mapcar (lambda (prop) (list 'quote prop)) properties))))
 
-(defun slime-clime-presentations-map (presentations)
+(defun slime-clime-reread (form)
+  "Reread FORM by prining readably and then reading.
+Used as an awful workaround for voodoo object identity problems."
+  (read (let (print-length print-depth) (prin1-to-string form))))
+
+(defun slime-clime-presentations-map (presentations &optional pointer-shape)
   "Return an image 'map' property for PRESENTATIONS."
   (mapcar (lambda (presentation)
             (cl-destructuring-bind (number area tooltip) presentation
-              (let ((id (make-symbol (prin1-to-string number))))
-                `(,area ,(make-symbol (prin1-to-string id)) (pointer arrow help-echo ,tooltip)))))
+              (let ((id (slime-clime-id-to-keyword number)))
+                `(,area ,id (pointer ,(or pointer-shape 'arrow)
+                                     help-echo ,tooltip)))))
           presentations))
 
 
@@ -117,34 +128,39 @@ The input context is a list of presentation IDs ready for ACCEPT."
   ;; Update presentations
   (slime-clime-map-images
    (lambda (image)
-     (when (eq (get-text-property (point) 'slime-clime-connection)
+     (when (eq (get-text-property (1- (point)) 'slime-clime-connection)
                (slime-connection))
-       (let* ((image (get-text-property (point) 'display))
-              (presentations (image-property image 'slime-clime-presentations)))
-         ;; Activate only the areas representing presentations
-         ;; acceptable in the input context.
-         (setf (image-property image :map)
-               (cl-remove-if-not (lambda (area)
-                                   (member (second area)
-                                           (cdr input-context)))
-                                 presentations)))))))
+       (slime-clime-filter-presentations image input-context)))
+   slime-connection))
 
-;;; XXX unused
-(defun slime-clime-reset-input-context (connection)
+(defun slime-clime-filter-presentations (image input-context)
+  "Filter active areas of IMAGE based on INPUT-CONTEXT."
+  (let* ((all (image-property image 'slime-clime-presentations))
+         (filtered (cl-remove-if-not (lambda (area)
+                                       (member (first area) input-context))
+                                     all)))
+    (setf (image-property image :map) nil)
+    (setf (image-property image :map)
+          (slime-clime-reread (slime-clime-presentations-map filtered 'hand)))))
+
+(defun slime-clime-reset-input-context (&optional connection)
   "Reset the current input context."
   (slime-clime-map-images
    (lambda (image)
      (setf (image-property image :map)
-           (image-property image 'slime-clime-presentations)))))
+           (slime-clime-reread
+            (slime-clime-presentations-map
+             (image-property image 'slime-clime-presentations)))))
+   (or connection (slime-connection))))
 
-(defun slime-clime-map-images (fn)
+(defun slime-clime-map-images (fn connection)
   "Call FN with each CLIME image in all buffers in Emacs."
   (dolist (b (buffer-list))
     (with-current-buffer b
       (save-excursion
         (goto-char (point-min))
-        (while (text-property-search-forward 'slime-clime-connection)
-          (let ((image (get-text-property (point) 'display)))
+        (while (text-property-search-forward 'slime-clime-connection connection t)
+          (let ((image (get-text-property (1- (point)) 'display)))
             (when image
               (funcall fn image))))))))
 
