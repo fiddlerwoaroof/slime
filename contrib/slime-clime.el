@@ -67,11 +67,9 @@
     (t nil)))
 
 (defun slime-clime-id-to-keyword (id)
-  (assert (and (integerp id) (>= id 0)))
   (intern (format ":%d" id)))
 
 (defun slime-clime-keyword-to-id (id)
-  (assert (keywordp id))
   (cl-parse-integer (substring (symbol-name id) 1))) ;
 
 (defun slime-clime-insert-image (svg-data presentations)
