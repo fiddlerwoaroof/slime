@@ -34,7 +34,7 @@
 
 (defun slime-clime-mouse-1 (&optional event)
   (interactive "e")
-  (let* ((posn (second event))
+  (let* ((posn (cadr event))
          (image (posn-image posn))
          (area (posn-area posn)))
     (when (and area
