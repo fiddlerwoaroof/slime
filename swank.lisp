@@ -1041,7 +1041,8 @@ The processing is done in the extent of the toplevel restart."
            :new-package :new-features :ed :indentation-update
            :eval :eval-no-wait :background-message :inspect :ping
            :y-or-n-p :read-from-minibuffer :read-string :read-aborted :test-delay
-           :write-image :ed-rpc :ed-rpc-no-wait)
+           :write-image :ed-rpc :ed-rpc-no-wait
+           :write-clime :accept-for-clime)
           &rest _)
          (declare (ignore _))
          (encode-message event (current-socket-io)))
@@ -1375,6 +1376,18 @@ entered nothing, returns NIL when user pressed C-g."
     (force-output)
     (send-to-emacs `(:read-from-minibuffer ,(current-thread-id) ,tag
                                            ,prompt ,initial-value))
+    (third (wait-for-event `(:emacs-return ,tag result)))))
+
+(defun clime-accept-in-emacs (acceptable-presentation-ids)
+  "Ask user to accept a CLIM presentation."
+  (check-type acceptable-presentation-ids list)
+  (dolist (id acceptable-presentation-ids)
+    (check-type id (integer 0 *)))
+  (let ((tag (make-tag)))
+    (force-output)
+    (send-to-emacs `(:accept-for-clime ,(current-thread-id)
+                                       ,tag
+                                       ,acceptable-presentation-ids))
     (third (wait-for-event `(:emacs-return ,tag result)))))
 
 (defstruct (unreadable-result

@@ -187,6 +187,7 @@
            #:ed-rpc
            #:ed-rpc-no-wait
            #:y-or-n-p-in-emacs
+           #:clime-accept-in-emacs
            #:*find-definitions-right-trim*
            #:*find-definitions-left-trim*
            #:*after-toggle-trace-hook*
