@@ -15,23 +15,60 @@
 
 (defvar slime-clime-image-keymap
   (let ((map (make-sparse-keymap)))
-    ;; Currently using a catch-all keybinding because Emacs seems (?)
-    ;; to insist that a specific [mouse-1] binding would be matched as
-    ;; [area-id mouse-1] i.e. that we would need to define a
-    ;; keybinding for each and every presentation. That's a bit much.
-    ;; So for now we just catch all key/mouse events on the image.
+    ;; Tricky problem and solution:
     ;;
-    ;; (If you put the Emacs point/cursor over the image and the
-    ;; keyboard stops working then try clicking somewhere else so that
-    ;; the point/cursor can escape...
-    ;;(define-key map [mouse-1] 'slime-clime-mouse-1)
-    (define-key map [t] 'slime-clime-input-event)
+    ;; - We want to handle mouse clicks for all presentation IDs / areas.
+    ;; - Emacs expects a separate keymap entry for each presentation ID.
+    ;; - There can be lots presentation of IDs e.g. thousands/millions.
+    ;; - We can use one catch-all [t] binding instead
+    ;; - ... but then we also trap all keyboard events when point is on image.
+    ;;
+    ;; So on the one hand we don't really want to have
+    ;; thousands/millions of separate key bindings to cover all
+    ;; presentation IDs, and on the other hand we don't want the
+    ;; keyboard to stop working when the point is on an image.
+    ;;
+    ;; What to do? Clever solution from wasamasa on #emacs:
+    ;;
+    ;; Define a catch-all [t] binding but tell Emacs that it is a menu
+    ;; item. Why? Because Emacs keymaps support a special :filter
+    ;; property that allows Elisp code to decide whether to process an
+    ;; event or let it propagate up the keymap chain and,
+    ;; mysteriously, this feature only works for menu items.
+    ;;
+    ;; (Perhaps, dear reader, you can see a simpler solution and/or
+    ;; explanation...)
+    ;;
+    ;; FURTHERMORE,
+    ;;
+    ;; In CLIME it should be possible to kill/yank images as much as
+    ;; you like, for example to paste your favorite CLIM images into a
+    ;; special buffer for reference later. However, Emacs tends to
+    ;; remove the 'keymap property when you yank text/images from the
+    ;; kill ring (see `yank-excluded-properties'.)
+    ;;
+    ;; SO,
+    ;;
+    ;; CLIME includes a hack below such that we re-add this keymap to
+    ;; all images in all Emacs buffers any time we have a convenient
+    ;; opportunity to do so, which at the time of writing is when
+    ;; visiting all the images to update the "input context" by
+    ;; redefining which image areas are active.
+    ;;
+    ;; Maybe there is a simpler way to do that too, dear reader!
+    ;;
+    (define-key map [t] '(menu-item "" nil :filter slime-clime-event-filter))
     map))
 
-(defun slime-clime-input-event (&optional event)
-  (interactive "e")
-  (when (eq (event-basic-type event) 'mouse-1)
-    (slime-clime-mouse-1 event)))
+(defun slime-clime-event-filter (map)
+  "Process relevant mouse events and punt keyboard events."
+  ;; NB: Return nil to punt "other" events.
+  (when (mouse-event-p last-input-event)
+    (when (eq (event-basic-type last-input-event) 'mouse-1)
+      ;; Mouse event clicking on a presentation
+      (slime-clime-mouse-1 last-input-event)
+      ;; Mouse event with no action
+      'ignore)))
 
 (defun slime-clime-mouse-1 (&optional event)
   (interactive "e")
@@ -79,10 +116,9 @@
                       :map map
                       'slime-clime-connection (slime-connection))))
     (insert-image (slime-clime-create-image svg-data map props))
-    (put-text-property (1- (point)) (point)
-                       'slime-clime-connection (slime-connection))
-    (put-text-property (1- (point)) (point)
-                       'keymap slime-clime-image-keymap)))
+    (add-text-properties (1- (point)) (point)
+                         (list 'slime-clime-connection (slime-connection)
+                               'keymap slime-clime-image-keymap))))
 
 (defun slime-clime-create-image (svg-data map properties)
   ;; Somehow create-image does not work properly when passed the image
@@ -127,6 +163,7 @@ The input context is a list of presentation IDs ready for ACCEPT."
   ;; Update presentations
   (slime-clime-map-images
    (lambda (image)
+     (slime-clime-restore-keymap-before-point)
      (when (eq (get-text-property (1- (point)) 'slime-clime-connection)
                (slime-connection))
        (slime-clime-filter-presentations image input-context)))
@@ -146,6 +183,7 @@ The input context is a list of presentation IDs ready for ACCEPT."
   "Reset the current input context."
   (slime-clime-map-images
    (lambda (image)
+     (slime-clime-restore-keymap-before-point)
      (setf (image-property image :map)
            (slime-clime-reread
             (slime-clime-presentations-map
@@ -162,6 +200,15 @@ The input context is a list of presentation IDs ready for ACCEPT."
           (let ((image (get-text-property (1- (point)) 'display)))
             (when image
               (funcall fn image))))))))
+
+(defun slime-clime-restore-keymap-before-point ()
+  "Restore the CLIME keymap to the image immediately before point.
+This remedies the situation where the keymap is missing for some
+reason, for example because the image was killed and yanked and
+`yank-excluded-properties' caused the keymap to be stripped off
+from the new copy."
+  (put-text-property (1- (point)) (point)
+                     'keymap slime-clime-image-keymap))
 
 
 ;;;; Image information
