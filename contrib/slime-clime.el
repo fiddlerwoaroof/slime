@@ -161,20 +161,25 @@ The input context is a list of presentation IDs ready for ACCEPT."
   (setf (slime-clime-input-context)
         (list thread tag input-context))
   ;; Update presentations
-  (slime-clime-map-images
-   (lambda (image)
-     (slime-clime-restore-keymap-before-point)
-     (when (eq (get-text-property (1- (point)) 'slime-clime-connection)
-               (slime-connection))
-       (slime-clime-filter-presentations image input-context)))
-   slime-connection))
+  (let ((enabled (slime-clime-enabled-presentations input-context)))
+    (slime-clime-map-images
+     (lambda (image)
+       (slime-clime-restore-keymap-before-point)
+       (when (eq (get-text-property (1- (point)) 'slime-clime-connection)
+                 (slime-connection))
+         (slime-clime-filter-presentations image enabled)))
+     slime-connection)))
 
-(defun slime-clime-filter-presentations (image input-context)
-  "Filter active areas of IMAGE based on INPUT-CONTEXT."
+(defun slime-clime-enabled-presentations (input-context)
+  "Return a hashtable of the enabled presentation set."
+  (let ((enabled (make-hash-table)))
+    (mapc (lambda (id) (puthash id t enabled)) input-context)
+    enabled))
+
+(defun slime-clime-filter-presentations (image enabled)
+  "Filter active areas of IMAGE based on ENABLED hash-table set."
   (let* ((all (image-property image 'slime-clime-presentations))
-         (filtered (cl-remove-if-not (lambda (area)
-                                       (member (car area) input-context))
-                                     all)))
+         (filtered (cl-remove-if-not (lambda (area) (gethash (car area) enabled)) all)))
     (setf (image-property image :map) nil)
     (setf (image-property image :map)
           (slime-clime-reread (slime-clime-presentations-map filtered 'hand)))))
