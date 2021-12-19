@@ -217,7 +217,8 @@ Complete listing of keybindings with *Fuzzy Completions*:
 (defun slime-fuzzy-completions (prefix &optional default-package)
   "Get the list of sorted completion objects from completing
 `prefix' in `package' from the connected Lisp."
-  (let ((prefix (cl-etypecase prefix
+  (let ((context (car (list-at-point)))
+        (prefix (cl-etypecase prefix
                   (symbol (symbol-name prefix))
                   (string prefix))))
     (slime-eval `(swank:fuzzy-completions ,prefix
@@ -225,7 +226,7 @@ Complete listing of keybindings with *Fuzzy Completions*:
                                                (slime-current-package))
                   :limit ,slime-fuzzy-completion-limit
                   :time-limit-in-msec
-                  ,slime-fuzzy-completion-time-limit-in-msec))))
+                  :context ',context))))
 
 (defun slime-fuzzy-selected (prefix completion)
   "Tell the connected Lisp that the user selected completion
