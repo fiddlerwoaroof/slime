@@ -3,7 +3,7 @@
 ;; URL: https://github.com/slime/slime
 ;; Package-Requires: ((cl-lib "0.5") (macrostep "0.9"))
 ;; Keywords: languages, lisp, slime
-;; Version: 2.26.1
+;; Version: 2.27
 
 ;;;; License and Commentary
 
@@ -75,6 +75,7 @@
 (require 'outline)
 (require 'arc-mode)
 (require 'etags)
+(require 'xref)
 (require 'compile)
 (require 'gv)
 
@@ -3672,14 +3673,13 @@ alist but ignores CDRs."
 ;;;; Edit definition
 
 (defun slime-push-definition-stack ()
-  "Add point to find-tag-marker-ring."
-  (require 'etags)
-  (ring-insert find-tag-marker-ring (point-marker)))
+  "Add point to find-tag-marker-stack."
+  (xref-push-marker-stack (point-marker)))
 
 (defun slime-pop-find-definition-stack ()
   "Pop the edit-definition stack and goto the location."
   (interactive)
-  (pop-tag-mark))
+  (xref-pop-marker-stack))
 
 (cl-defstruct (slime-xref (:conc-name slime-xref.) (:type list))
   dspec location)
