@@ -735,7 +735,9 @@ forward keywords to OPERATOR."
 (defmethod extra-keywords (operator args)
   ;; default method
   (declare (ignore args))
-  (let ((symbol-function (symbol-function operator)))
+  (let ((symbol-function (if (functionp operator)
+                             operator
+                             (symbol-function operator))))
     (if (typep symbol-function 'generic-function)
         (generic-function-keywords symbol-function)
         nil)))
@@ -920,38 +922,85 @@ If the arglist is not available, return :NOT-AVAILABLE."))
          nil)))
     (values decoded-arglist determining-args t)))
 
+(defun %funcall-like-enrich-decoded-arglist (argument-forms)
+  (let ((function-name-form (car argument-forms)))
+    (cond
+      ((and (listp function-name-form)
+            (length= function-name-form 2)
+            (memq (car function-name-form) '(quote function)))
+       (let ((function-name (cadr function-name-form)))
+         (when (valid-operator-symbol-p function-name)
+           (let ((function-arglist
+                   (compute-enriched-decoded-arglist function-name
+                                                     (cdr argument-forms))))
+             (return-from %funcall-like-enrich-decoded-arglist
+               (values
+                (make-arglist :required-args
+                              (list function-name-form)
+                              :optional-args
+                              (append
+                               (mapcar #'(lambda (arg)
+                                           (make-optional-arg arg nil))
+                                       (arglist.required-args function-arglist))
+                               (arglist.optional-args function-arglist))
+                              :key-p
+                              (arglist.key-p function-arglist)
+                              :keyword-args
+                              (arglist.keyword-args function-arglist)
+                              :rest
+                              (arglist.rest function-arglist)
+                              :allow-other-keys-p
+                              (arglist.allow-other-keys-p function-arglist))
+                (list function-name-form)
+                t))))))
+      ((and (symbolp function-name-form)
+            (boundp function-name-form)
+            (let ((function (symbol-value function-name-form)))
+              (or (functionp function)
+                  (and (consp function)
+                       (eql 'function (car function)))
+                  (fboundp function))))
+       (let* ((function (symbol-value function-name-form))
+              (function-arglist
+                (compute-enriched-decoded-arglist
+                 (cond ((and (consp function)
+                             (eql 'function (car function)))
+                        (fdefinition (cadr function)))
+                       ((functionp function)
+                        function)
+                       ((fboundp function)
+                        (fdefinition function)))
+                 (cdr argument-forms))))
+         (return-from %funcall-like-enrich-decoded-arglist
+           (values
+            (make-arglist :required-args
+                          (list function-name-form)
+                          :optional-args
+                          (append
+                           (mapcar #'(lambda (arg)
+                                       (make-optional-arg arg nil))
+                                   (arglist.required-args function-arglist))
+                           (arglist.optional-args function-arglist))
+                          :key-p
+                          (arglist.key-p function-arglist)
+                          :keyword-args
+                          (arglist.keyword-args function-arglist)
+                          :rest
+                          (arglist.rest function-arglist)
+                          :allow-other-keys-p
+                          (arglist.allow-other-keys-p function-arglist))
+            (list function-name-form)
+            t)))))))
+
 (defmethod compute-enriched-decoded-arglist ((operator-form (eql 'apply))
                                              argument-forms)
-  (let ((function-name-form (car argument-forms)))
-    (when (and (listp function-name-form)
-               (length= function-name-form 2)
-               (memq (car function-name-form) '(quote function)))
-      (let ((function-name (cadr function-name-form)))
-        (when (valid-operator-symbol-p function-name)
-          (let ((function-arglist
-                 (compute-enriched-decoded-arglist function-name
-                                                   (cdr argument-forms))))
-            (return-from compute-enriched-decoded-arglist
-              (values
-               (make-arglist :required-args
-                             (list 'function)
-                             :optional-args
-                             (append
-                              (mapcar #'(lambda (arg)
-                                          (make-optional-arg arg nil))
-                                      (arglist.required-args function-arglist))
-                              (arglist.optional-args function-arglist))
-                             :key-p
-                             (arglist.key-p function-arglist)
-                             :keyword-args
-                             (arglist.keyword-args function-arglist)
-                             :rest
-                             'args
-                             :allow-other-keys-p
-                             (arglist.allow-other-keys-p function-arglist))
-               (list function-name-form)
-               t)))))))
-  (call-next-method))
+  (or (%funcall-like-enrich-decoded-arglist argument-forms)
+      (call-next-method)))
+
+(defmethod compute-enriched-decoded-arglist ((operator-form (eql 'funcall))
+                                             argument-forms)
+  (or (%funcall-like-enrich-decoded-arglist argument-forms)
+      (call-next-method)))
 
 (defmethod compute-enriched-decoded-arglist
     ((operator-form (eql 'multiple-value-call)) argument-forms)
@@ -965,22 +1014,22 @@ If the arglist is not available, return :NOT-AVAILABLE."))
 		    (pop ,list))))
     (do-decoded-arglist decoded-arglist
       (&provided ()
-       (assert (eq (pop-or-return args)
-                   (pop (arglist.provided-args decoded-arglist)))))
+                 (assert (eq (pop-or-return args)
+                             (pop (arglist.provided-args decoded-arglist)))))
       (&required ()
-       (pop-or-return args)
-       (pop (arglist.required-args decoded-arglist)))
+                 (pop-or-return args)
+                 (pop (arglist.required-args decoded-arglist)))
       (&optional ()
-       (pop-or-return args)
-       (pop (arglist.optional-args decoded-arglist)))
+                 (pop-or-return args)
+                 (pop (arglist.optional-args decoded-arglist)))
       (&key (keyword)
-       ;; N.b. we consider a keyword to be given only when the keyword
-       ;; _and_ a value has been given for it.
-       (loop for (key value) on args by #'cddr
-	     when (and (eq keyword key) value)
-	       do (setf (arglist.keyword-args decoded-arglist)
-			(remove keyword (arglist.keyword-args decoded-arglist)
-				:key #'keyword-arg.keyword))))))
+            ;; N.b. we consider a keyword to be given only when the keyword
+            ;; _and_ a value has been given for it.
+            (loop for (key value) on args by #'cddr
+	          when (and (eq keyword key) value)
+	            do (setf (arglist.keyword-args decoded-arglist)
+			     (remove keyword (arglist.keyword-args decoded-arglist)
+				     :key #'keyword-arg.keyword))))))
   decoded-arglist)
 
 (defun remove-given-args (decoded-arglist args)
@@ -1145,11 +1194,11 @@ wrapped in ===> X <===.
 
 Second, a boolean value telling whether the returned string can be cached."
   (handler-bind ((serious-condition
-                  #'(lambda (c)
-                      (unless (debug-on-swank-error)
-                        (let ((*print-right-margin* print-right-margin))
-                          (return-from autodoc
-                            (format nil "Arglist Error: \"~A\"" c)))))))
+                   #'(lambda (c)
+                       (unless (debug-on-swank-error)
+                         (let ((*print-right-margin* print-right-margin))
+                           (return-from autodoc
+                             (format nil "Arglist Error: \"~A\"" c)))))))
     (with-buffer-syntax ()
       (multiple-value-bind (form arglist obj-at-cursor form-path)
           (find-subform-with-arglist (parse-raw-form raw-form))
