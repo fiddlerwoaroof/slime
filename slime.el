@@ -3948,6 +3948,7 @@ The result is a (possibly empty) list of definitions."
 
 (defmacro defslimefun (name arglist &rest body)
   "Define a function via `cl-defun' that can be invoked from SWANK."
+  (declare (indent 2))
   `(progn
      (put ',name 'slime-rpc t)
      (cl-defun ,name ,arglist ,@body)))
