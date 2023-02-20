@@ -1369,13 +1369,14 @@ expansion will be added to the REPL's history.)"
 
 (defun slime-kill-all-buffers ()
   "Kill all the SLIME-related buffers."
-  (dolist (buf (buffer-list))
-    (when (or (string= (buffer-name buf) slime-event-buffer-name)
-              (string-match "^\\*inferior-lisp*" (buffer-name buf))
-              (string-match "^\\*slime-repl .*\\*$" (buffer-name buf))
-              (string-match "^\\*sldb .*\\*$" (buffer-name buf))
-              (string-match "^\\*SLIME.*\\*$" (buffer-name buf)))
-      (kill-buffer buf))))
+  (let ((kill-buffer-query-functions ()))
+    (dolist (buf (buffer-list))
+      (when (or (string= (buffer-name buf) slime-event-buffer-name)
+                (string-match "^\\*inferior-lisp*" (buffer-name buf))
+                (string-match "^\\*slime-repl .*\\*$" (buffer-name buf))
+                (string-match "^\\*sldb .*\\*$" (buffer-name buf))
+                (string-match "^\\*SLIME.*\\*$" (buffer-name buf)))
+        (kill-buffer buf)))))
 
 (defslime-repl-shortcut slime-repl-shortcut-help ("help")
   (:handler 'slime-list-repl-short-cuts)
