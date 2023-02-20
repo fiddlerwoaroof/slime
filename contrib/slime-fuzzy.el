@@ -224,9 +224,9 @@ Complete listing of keybindings with *Fuzzy Completions*:
     (slime-eval `(swank:fuzzy-completions ,prefix
                                           ,(or default-package
                                                (slime-current-package))
-                  :limit ,slime-fuzzy-completion-limit
-                  :time-limit-in-msec
-                  :context ',context))))
+                                          :limit ,slime-fuzzy-completion-limit
+                                          :time-limit-in-msec 500
+                                          :context ',context))))
 
 (defun slime-fuzzy-selected (prefix completion)
   "Tell the connected Lisp that the user selected completion
