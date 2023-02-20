@@ -766,6 +766,7 @@ If NEWLINE is true then add a newline at the end of the input."
     (slime-repl-add-to-input-history
      (buffer-substring slime-repl-input-start-mark end))
     (when newline
+      ;; Reset the output columns independently in case they are out of sync.
       (insert "\n")
       (slime-repl-show-maximum-output))
     (let ((inhibit-modification-hooks t))
