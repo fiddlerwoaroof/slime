@@ -307,6 +307,25 @@ TIME-LIMIT-IN-MSEC is NIL, an infinite time limit is assumed.")
    '<
    :key 'swank::fuzzy-matching.score))
 
+(defmethod swank::fuzzy-generate-matchings (string _ __ (context (eql 'cl:in-package)))
+  (stable-sort
+   (let ((search-string (string-left-trim "#:" string)))
+     (map 'vector
+          (lambda (system)
+            (let ((dist-name (string-upcase system)))
+              (swank::make-fuzzy-matching (if (and (> (length string) 0)
+                                                   (eql (elt string 0) #\#))
+                                              (make-symbol dist-name)
+                                              (alexandria:make-keyword dist-name))
+                                          ""
+                                          (or (search (string-upcase search-string) dist-name)
+                                              (length dist-name))
+                                          ()
+                                          ())))
+          (list-all-package-names t)))
+   '<
+   :key 'swank::fuzzy-matching.score))
+
 (defun %guess-sort-duration (length)
   ;; These numbers are pretty much arbitrary, except that they're
   ;; vaguely correct on my machine with SBCL. Yes, this is an ugly
