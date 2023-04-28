@@ -282,8 +282,10 @@ LISTENER-EVAL directly, so that spacial variables *, etc are set."
   (let ((p *package*))
     (unwind-protect (funcall fun)
       (unless (eq *package* p)
-        (send-to-emacs (list :new-package (package-name *package*)
-                             (package-string-for-prompt *package*)))))))
+        (prog1 (send-to-emacs (list :new-package (package-name *package*)
+                                    (package-string-for-prompt *package*)))
+          (when swank::*on-package-change*
+            (funcall swank::*on-package-change* p *package*)))))))
 
 (defun send-repl-results-to-emacs (values)
   (finish-output)

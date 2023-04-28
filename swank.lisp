@@ -284,7 +284,7 @@ to T unless you want to debug swank internals.")
 
 (defvar *swank-io-package*
   (let ((package (make-package :swank-io-package :use '())))
-    (import '(nil t quote) package)
+    (import '(nil t quote in-package find-package #+quicklisp ql:quickload) package)
     package))
 
 (defvar *log-events* nil)
@@ -1798,23 +1798,27 @@ Used by pprint-eval.")
                  (dolist (o values)
                    (pprint o)
                    (terpri))))))))
-  
+
 (defslimefun pprint-eval (string)
   (with-buffer-syntax ()
     (let* ((s (make-string-output-stream))
-           (values 
-            (let ((*standard-output* s)
-                  (*trace-output* s))
-              (multiple-value-list (eval (read-from-string string))))))
+           (values
+             (let ((*standard-output* s)
+                   (*trace-output* s))
+               (multiple-value-list (eval (read-from-string string))))))
       (cat (get-output-stream-string s)
            (swank-pprint values)))))
 
+(defvar *on-package-change* nil)
 (defslimefun set-package (name)
   "Set *package* to the package named NAME.
 Return the full package-name and the string to use in the prompt."
-  (let ((p (guess-package name)))
+  (let ((old *package*)
+        (p (guess-package name)))
     (assert (packagep p) nil "Package ~a doesn't exist." name)
     (setq *package* p)
+    (when *on-package-change*
+      (funcall *on-package-change* old *package*))
     (list (package-name p) (package-string-for-prompt p))))
 
 (defun cat (&rest strings)
