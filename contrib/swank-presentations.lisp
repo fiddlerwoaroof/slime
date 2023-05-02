@@ -105,14 +105,16 @@ The secondary value indicates the absence of an entry."
                           (save-presented-object value))))
 	     (send-to-emacs `(:presentation-start ,id :repl-result))
 	     (send-to-emacs `(:write-string ,(prin1-to-string value)
-					    :repl-result))
+					    :repl-result
+					    nil))
 	     (send-to-emacs `(:presentation-end ,id :repl-result))
 	     (send-to-emacs `(:write-string ,(string #\Newline)
-					    :repl-result)))))
+					    :repl-result
+					    nil)))))
     (fresh-line)
     (finish-output)
     (if (null values)
-        (send-to-emacs `(:write-string "; No value" :repl-result))
+        (send-to-emacs `(:write-string "; No value" :repl-result nil))
         (mapc #'send values))))
 
 

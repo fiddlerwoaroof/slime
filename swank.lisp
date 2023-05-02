@@ -34,7 +34,7 @@
                                           (#\\ . "\\\\")
                                           (#\newline . "\\n")
                                           (#\return . "\\r"))))
-                   (t (write-string string stream)))))
+                   (t (write-string string stream nil)))))
       (set-pprint-dispatch 'string  #'print-string 0 table)
       table)))
 
@@ -3754,13 +3754,23 @@ Collisions are caused because package information is ignored."
 #-clasp
 (add-hook *pre-reply-hook* 'sync-indentation-to-emacs)
 
+(defvar *output-context* nil)
+
+(defmacro with-face ((&rest r &key &allow-other-keys) &body body)
+  `(let ((*output-context* (append (list ',(intern "FACE" :swank-io-package)
+                                         (list ,@r)
+                                         ',(intern "FONT-LOCK-FACE" :swank-io-package)
+                                         (list ,@r))
+                                   *output-context*)))
+     ,@body))
+
 (defun make-output-function-for-target (connection target)
   "Create a function to send user output to a specific TARGET in Emacs."
   (lambda (string)
     (swank::with-connection (connection)
       (with-simple-restart
           (abort "Abort sending output to Emacs.")
-        (swank::send-to-emacs `(:write-string ,string ,target))))))
+        (swank::send-to-emacs `(:write-string ,string ,target ,*output-context*))))))
 
 (defun make-output-stream-for-target (connection target)
   "Create a stream that sends output to a specific TARGET in Emacs."
