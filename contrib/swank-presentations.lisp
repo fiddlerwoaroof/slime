@@ -112,7 +112,7 @@ The secondary value indicates the absence of an entry."
 					    :repl-result
 					    nil)))))
     (fresh-line)
-    (finish-output)
+    (really-finish-output *standard-output*)
     (if (null values)
         (send-to-emacs `(:write-string "; No value" :repl-result nil))
         (mapc #'send values))))

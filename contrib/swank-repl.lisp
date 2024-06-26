@@ -221,7 +221,7 @@ This is an optimized way for Lisp to deliver output to Emacs."
 
 (defun read-user-input-from-emacs ()
   (let ((tag (make-tag)))
-    (force-output)
+    (really-finish-output *standard-output*)
     (send-to-emacs `(:read-string ,(current-thread-id) ,tag))
     (let ((ok nil))
       (unwind-protect
@@ -288,7 +288,7 @@ LISTENER-EVAL directly, so that spacial variables *, etc are set."
             (funcall swank::*on-package-change* p *package*)))))))
 
 (defun send-repl-results-to-emacs (values)
-  (finish-output)
+  (really-finish-output *standard-output*)
   (if (null values)
       (send-to-emacs `(:write-string "; No value" :repl-result nil))
       (dolist (v values)

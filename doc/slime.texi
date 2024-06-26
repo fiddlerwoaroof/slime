@@ -12,7 +12,7 @@
 @end direntry
 @c %**end of header
 
-@set EDITION 2.28
+@set EDITION 2.30
 @set UPDATED @today{}
 @set TITLE SLIME User Manual
 @settitle @value{TITLE}, version @value{EDITION}
@@ -291,7 +291,7 @@ This chapter tells you how to get @SLIME{} up and running.
 
 @SLIME{} supports a wide range of operating systems and Lisp
 implementations. @SLIME{} runs on Unix systems, Mac OSX, and Microsoft
-Windows. GNU Emacs versions 24 and 23.4 are supported. @emph{XEmacs is
+Windows. GNU Emacs versions 24.3 and above are supported. @emph{XEmacs is
 not supported anymore}.
 
 The supported Lisp implementations, roughly ordered from the
@@ -1111,7 +1111,7 @@ Recompile all definitions.
 @table @kbd
 @kbditem{C-c C-m, slime-expand-1}
 Macroexpand (or compiler-macroexpand) the expression starting at point
-once.  If invoked with a prefix argument use macroexpand instead or
+once.  If invoked with a prefix argument, use macroexpand instead of
 macroexpand-1 (or compiler-macroexpand instead of
 compiler-macroexpand-1).
 
