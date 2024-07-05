@@ -293,8 +293,8 @@ LISTENER-EVAL directly, so that spacial variables *, etc are set."
       (send-to-emacs `(:write-string "; No value" :repl-result nil))
       (dolist (v values)
         (send-to-emacs `(:write-string ,(cat (prin1-to-string v) #\newline)
-                                       :repl-result)))))
-                                       nil)))))
+                         :repl-result
+                         nil)))))
 
 (defslimefun redirect-trace-output (target)
   (setf (connection.trace-output *emacs-connection*)
