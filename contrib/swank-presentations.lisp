@@ -108,16 +108,16 @@ The secondary value indicates the absence of an entry."
                (if (> (length string) 10000)
                    (loop for i below (length string) by 10000
                          do (send-to-emacs `(:write-string ,(subseq string i (min (length string)
-                                                                                  (+ i 10000))) 
+                                                                                  (+ i 10000)))
                                              :repl-result)))
-	           (send-to-emacs `(:write-string ,string :repl-result))))
+	           (send-to-emacs `(:write-string ,string :repl-result nil))))
 	     (send-to-emacs `(:presentation-end ,id :repl-result))
-	     (send-to-emacs `(:write-string ,(string #\Newline)
+	     (send-to-emacs `(:write-string ,(string #\Newline nil)
 			      :repl-result)))))
     (fresh-line)
     (really-finish-output *standard-output*)
     (if (null values)
-        (send-to-emacs `(:write-string "; No value" :repl-result))
+        (send-to-emacs `(:write-string "; No value" :repl-result nil))
         (mapc #'send values))))
 
 

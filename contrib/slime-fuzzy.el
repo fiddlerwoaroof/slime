@@ -77,10 +77,10 @@ buffer. This is used to hightlight the text.")
 (defvar slime-target-buffer-fuzzy-completions-map
   (let ((map (make-sparse-keymap)))
     (cl-labels ((def (keys command)
-                   (unless (listp keys)
-                     (setq keys (list keys)))
-                   (dolist (key keys)
-                     (define-key map key command))))
+                  (unless (listp keys)
+                    (setq keys (list keys)))
+                  (dolist (key keys)
+                    (define-key map key command))))
       (def `([remap keyboard-quit]
              ,(kbd "C-g"))
            'slime-fuzzy-abort)
@@ -215,15 +215,18 @@ Complete listing of keybindings with *Fuzzy Completions*:
 (defun slime-fuzzy-completions (prefix &optional default-package)
   "Get the list of sorted completion objects from completing
 `prefix' in `package' from the connected Lisp."
-  (let ((prefix (cl-etypecase prefix
+  (let ((context (car (list-at-point)))
+        (prefix (cl-etypecase prefix
                   (symbol (symbol-name prefix))
                   (string prefix))))
     (slime-eval `(swank:fuzzy-completions ,prefix
                                           ,(or default-package
                                                (slime-current-package))
-                  :limit ,slime-fuzzy-completion-limit
-                  :time-limit-in-msec
-                  ,slime-fuzzy-completion-time-limit-in-msec))))
+                                          :limit ,slime-fuzzy-completion-limit
+                                          :time-limit-in-msec 500
+                                          ,@(unless (s-ends-with? ":"
+                                                                  (symbol-name context))
+                                              `(:context ',context))))))
 
 (defun slime-fuzzy-selected (prefix completion)
   "Tell the connected Lisp that the user selected completion

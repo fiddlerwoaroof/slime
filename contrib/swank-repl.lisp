@@ -108,7 +108,7 @@ INPUT OUTPUT IO REPL-RESULTS"
   "Create function to send user output to Emacs."
   (lambda (string)
     (with-connection (connection)
-      (send-to-emacs `(:write-string ,string nil ,(current-thread-id)))
+      (send-to-emacs `(:write-string ,string nil nil ,(current-thread-id)))
       ;; Wait for Emacs to finish writing, otherwise on continuous
       ;; output its input buffer will fill up and nothing else will be
       ;; processed, most importantly an interrupt-thread request.
@@ -266,16 +266,19 @@ LISTENER-EVAL directly, so that spacial variables *, etc are set."
   (let ((p *package*))
     (unwind-protect (funcall fun)
       (unless (eq *package* p)
-        (send-to-emacs (list :new-package (package-name *package*)
-                             (package-string-for-prompt *package*)))))))
+        (prog1 (send-to-emacs (list :new-package (package-name *package*)
+                                    (package-string-for-prompt *package*)))
+          (when swank::*on-package-change*
+            (funcall swank::*on-package-change* p *package*)))))))
 
 (defun send-repl-results-to-emacs (values)
   (really-finish-output *standard-output*)
   (if (null values)
-      (send-to-emacs `(:write-string "; No value" :repl-result))
+      (send-to-emacs `(:write-string "; No value" :repl-result nil))
       (dolist (v values)
         (send-to-emacs `(:write-string ,(cat (prin1-to-string v) #\newline)
-                                       :repl-result)))))
+                         :repl-result
+                         nil)))))
 
 (defslimefun redirect-trace-output (target)
   (setf (connection.trace-output *emacs-connection*)

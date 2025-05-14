@@ -191,13 +191,14 @@ input start, return it.  Otherwise, return 'slime-repl-input-start-mark'."
 
 (defvar slime-write-string-function 'slime-repl-write-string)
 
-(defun slime-write-string (string &optional target)
+(defun slime-write-string (string &optional target context)
   "Insert STRING in the REPL buffer or some other TARGET.
 If TARGET is nil, insert STRING as regular process
 output.  If TARGET is :repl-result, insert STRING as the result of the
 evaluation.  Other values of TARGET map to an Emacs marker via the
 hashtable `slime-output-target-to-marker'; output is inserted at this marker."
-  (funcall slime-write-string-function string target))
+  (let ((str (apply #'propertize string context)))
+    (funcall slime-write-string-function str target)))
 
 (defun slime-repl-write-string (string &optional target)
   (cl-case target
@@ -1322,13 +1323,14 @@ expansion will be added to the REPL's history.)"
 
 (defun slime-kill-all-buffers ()
   "Kill all the SLIME-related buffers."
-  (dolist (buf (buffer-list))
-    (when (or (string= (buffer-name buf) slime-event-buffer-name)
-              (string-match "^\\*inferior-lisp*" (buffer-name buf))
-              (string-match "^\\*slime-repl .*\\*$" (buffer-name buf))
-              (string-match "^\\*sldb .*\\*$" (buffer-name buf))
-              (string-match "^\\*SLIME.*\\*$" (buffer-name buf)))
-      (kill-buffer buf))))
+  (let ((kill-buffer-query-functions ()))
+    (dolist (buf (buffer-list))
+      (when (or (string= (buffer-name buf) slime-event-buffer-name)
+                (string-match "^\\*inferior-lisp*" (buffer-name buf))
+                (string-match "^\\*slime-repl .*\\*$" (buffer-name buf))
+                (string-match "^\\*sldb .*\\*$" (buffer-name buf))
+                (string-match "^\\*SLIME.*\\*$" (buffer-name buf)))
+        (kill-buffer buf)))))
 
 (defslime-repl-shortcut slime-repl-shortcut-help ("help")
   (:handler 'slime-list-repl-short-cuts)
@@ -1663,8 +1665,8 @@ expansion will be added to the REPL's history.)"
 
 (defun slime-repl-event-hook-function (event)
   (slime-dcase event
-    ((:write-string output &optional target thread)
-     (slime-write-string output target)
+    ((:write-string output &optional target context thread)
+     (slime-write-string output target context)
      (when thread
        (slime-send `(:write-done ,thread)))
      t)
