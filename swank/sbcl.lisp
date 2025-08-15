@@ -1329,19 +1329,15 @@ stack."
     (code-location-source-location
      (sb-di:frame-code-location (nth-frame index)))))
 
-(defvar *keep-non-valid-locals* nil)
-
 (defun frame-debug-vars (frame)
   "Return a vector of debug-variables in frame."
   (let* ((all-vars (sb-di::debug-fun-debug-vars (sb-di:frame-debug-fun frame)))
          (loc (sb-di:frame-code-location frame))
-         (vars (if *keep-non-valid-locals*
-                   all-vars
-                   (remove-if (lambda (var)
-                                (ecase (sb-di:debug-var-validity var loc)
-                                  (:valid nil)
-                                  ((:invalid :unknown) t)))
-                              all-vars)))
+         (vars (remove-if (lambda (var)
+                            (ecase (sb-di:debug-var-validity var loc)
+                              (:valid nil)
+                              ((:invalid :unknown) t)))
+                          all-vars))
          more-context
          more-count)
     (values (when vars
@@ -2046,12 +2042,3 @@ stack."
 (defimplementation call-with-interrupt-handler (interrupt-handler function)
   (let ((sb-thread:*interrupt-handler* interrupt-handler))
     (funcall function)))
-
-(defimplementation lock-package (package)
-  (sb-ext:lock-package package))
-
-(defimplementation unlock-package (package)
-  (sb-ext:unlock-package package))
-
-(defimplementation expand-with-unlocked-packages (packages body)
-  `(sb-ext:with-unlocked-packages ,packages ,@body))

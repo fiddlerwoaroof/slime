@@ -734,7 +734,8 @@ first."
            (serve-requests (setf connection (make-connection socket client style))))
       (unless dont-close
         (%stop-server :socket socket)
-        (when (eq style :spawn)
+        (when (and connection
+                   (eq style :spawn))
           (with-connection (connection)
             (loop
              (dcase (wait-for-event `(:run-on-main-thread _))
@@ -1695,6 +1696,8 @@ Fall back to the current if no such package exists."
           (*print-lines* (or *print-lines* ,lines)))
      ,@body))
 
+(defvar *eval-continuation* nil)
+
 (defun eval-for-emacs (form buffer-package id)
   "Bind *BUFFER-PACKAGE* to BUFFER-PACKAGE and evaluate FORM.
 Return the result to the continuation ID.
@@ -1704,7 +1707,8 @@ Errors are trapped and invoke our debugger."
          (let ((*buffer-package* (guess-buffer-package buffer-package))
                (*buffer-readtable* (guess-buffer-readtable buffer-package))
                (*pending-continuations* (cons id *pending-continuations*))
-               (*pre-reply-hook* *pre-reply-hook*))
+               (*pre-reply-hook* *pre-reply-hook*)
+               (*eval-continuation* id))
            (check-type *buffer-package* package)
            (check-type *buffer-readtable* readtable)
            ;; APPLY would be cleaner than EVAL.
@@ -2556,15 +2560,14 @@ Record compiler notes signalled as `compiler-condition's."
 
 (defslimefun swank-require (modules &optional filename)
   "Load the module MODULE."
-  (with-unlocked-packages (swank/backend)
-    (dolist (module (ensure-list modules))
-      (unless (member (string module) *modules* :test #'string=)
-        (catch 'dont-load
-          (require module (if filename
-                              (filename-to-pathname filename)
-                              (module-filename module)))
-          (assert (member (string module) *modules* :test #'string=)
-                  () "Required module ~s was not provided" module)))))
+  (dolist (module (ensure-list modules))
+    (unless (member (string module) *modules* :test #'string=)
+      (catch 'dont-load
+        (require module (if filename
+                            (filename-to-pathname filename)
+                            (module-filename module)))
+        (assert (member (string module) *modules* :test #'string=)
+                () "Required module ~s was not provided" module))))
   *modules*)
 
 (defvar *find-module* 'find-module
@@ -2676,8 +2679,7 @@ the filename of the module (or nil if the file doesn't exist).")
 
 (defslimefun simple-completions (prefix package)
   "Return a list of completions for the string PREFIX."
-  (let ((strings (all-completions prefix package)))
-    (list strings (longest-common-prefix strings))))
+  (all-completions prefix package))
 
 (defun all-completions (prefix package)
   (multiple-value-bind (name pname intern) (tokenize-symbol prefix)
@@ -2690,7 +2692,7 @@ the filename of the module (or nil if the file doesn't exist).")
            (strings (loop for sym in syms
                           for str = (unparse-symbol sym)
                           when (prefix-match-p name str) ; remove |Foo|
-                          collect str)))
+                          collect (cons str sym))))
       (format-completion-set strings intern pname))))
 
 (defun matching-symbols (package external test)
@@ -2725,11 +2727,45 @@ the filename of the module (or nil if the file doesn't exist).")
                  (if diff-pos (subseq s1 0 diff-pos) s1))))
         (reduce #'common-prefix strings))))
 
+(defun symbol-classification-string (symbol)
+  "Return a string in the form -f-c---- where each letter stands for
+boundp fboundp generic-function class macro special-operator package accessor"
+  (let ((letters "bfgctmspa")
+        (result (copy-seq "---------")))
+    (flet ((flip (letter)
+             (setf (char result (position letter letters))
+                   letter)))
+      (when (boundp symbol) (flip #\b))
+      (when (fboundp symbol)
+        (flip #\f)
+        (when (typep (ignore-errors (fdefinition symbol))
+                     'generic-function)
+          (flip #\g)))
+      (when (type-specifier-p symbol) (flip #\t))
+      (when (find-class symbol nil)   (flip #\c) )
+      (when (macro-function symbol)   (flip #\m))
+      (when (special-operator-p symbol) (flip #\s))
+      (when (find-package symbol)       (flip #\p))
+      (when (structure-accessor-p symbol) (flip #\a))
+      result)))
+
 (defun format-completion-set (strings internal-p package-name)
   "Format a set of completion strings.
 Returns a list of completions with package qualifiers if needed."
-  (mapcar (lambda (string) (untokenize-symbol package-name internal-p string))
-          (sort strings #'string<)))
+  (with-standard-io-syntax
+    (let ((*package* (find-package :keyword)))
+      (sort (mapcar (lambda (c)
+                      (if (stringp c)
+                          (list (untokenize-symbol package-name internal-p c))
+                          (destructuring-bind (name &rest symbol) c
+                            (list* (untokenize-symbol package-name internal-p name)
+                                   (if (stringp symbol)
+                                       symbol
+                                       (symbol-classification-string symbol))
+                                   (when (symbolp symbol)
+                                     (list (write-to-string symbol :readably t)))))))
+                    strings)
+            #'string< :key #'car))))
 
 
 ;;;; Simple arglist display
@@ -3920,9 +3956,8 @@ Collisions are caused because package information is ignored."
 (defun before-init (version load-path)
   (pushnew :swank *features*)
   (setq *swank-wire-protocol-version* version)
-  (setq *load-path* load-path)
-  (loop for x in '(swank/backend swank/rpc swank/match swank-mop swank/gray)
-        do (lock-package x)))
+  (setq *load-path* load-path))
+
 
 (defun init ()
   (run-hook *after-init-hook*))

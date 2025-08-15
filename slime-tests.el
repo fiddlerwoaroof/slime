@@ -259,8 +259,6 @@ conditions (assertions)."
                            (slime-symbol-at-point)
                            #'equal)))))
 
-
-
 (def-slime-test symbol-at-point.2 (sym)
   "fancy symbol-name _not_ at BOB/EOB"
   slime-test-symbols
@@ -336,9 +334,8 @@ conditions (assertions)."
   slime-test-symbols
   (slime-check-symbol-at-point "#+" sym ""))
 
-
 (def-slime-test sexp-at-point.1 (string)
-  "symbol-at-point after #'"
+  "sexp-at-point after noise"
   '(("foo")
     ("#:foo")
     ("#'foo")
@@ -353,6 +350,29 @@ conditions (assertions)."
                        string
                        (slime-sexp-at-point)
                        #'equal)))
+
+(def-slime-test sexp-at-point.2 (string)
+  "sexp-at-point top comment"
+  '((";\n")
+    ("; x\n")
+    (" ;\n")
+    (" ; x\n")
+    ("\n;\n")
+    ("\n; x\n"))
+  (with-temp-buffer
+    (lisp-mode)
+    (insert string)
+    (slime-test-expect (format "Check sexp `%s' (at %d)..."
+                               (buffer-string) (point))
+                       nil
+                       (slime-sexp-at-point)
+                       #'eq)
+    (goto-char (point-min))
+    (slime-test-expect (format "Check sexp `%s' (at %d)..."
+                               (buffer-string) (point))
+                       nil
+                       (slime-sexp-at-point)
+                       #'eq)))
 
 (def-slime-test narrowing ()
     "Check that narrowing is properly sustained."
@@ -591,7 +611,7 @@ confronted with nasty #.-fu."
 			      "swank::compile-file-output"
 			      "swank::compile-file-pathname"))
       ("cl:m-v-l" ()))
-  (let ((completions (slime-simple-completions prefix)))
+  (let ((completions (mapcar #'car (slime-simple-completions prefix))))
     (slime-test-expect "Completion set" expected-completions completions)))
 
 (def-slime-test read-from-minibuffer

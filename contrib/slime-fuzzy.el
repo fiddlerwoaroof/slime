@@ -212,6 +212,13 @@ Complete listing of keybindings with *Fuzzy Completions*:
   (set (make-local-variable 'slime-fuzzy-current-completion-overlay)
        (make-overlay (point) (point) nil t nil)))
 
+(defun slime-minibuffer-respecting-message (format &rest format-args)
+  "Display TEXT as a message, without hiding any minibuffer contents."
+  (let ((text (format " [%s]" (apply #'format format format-args))))
+    (if (minibuffer-window-active-p (minibuffer-window))
+        (minibuffer-message text)
+        (message "%s" text))))
+
 (defun slime-fuzzy-completions (prefix &optional default-package)
   "Get the list of sorted completion objects from completing
 `prefix' in `package' from the connected Lisp."
@@ -254,7 +261,13 @@ most recently enclosed macro or function."
 (defun slime-fuzzy-complete-symbol ()
   "Fuzzily completes the abbreviation at point into a symbol."
   (interactive)
-  (if (save-excursion (re-search-backward "\"[^ \t\n]+\\=" nil t))
+  (if (save-excursion (re-search-backward "\"[^ \t\n]+\\=" 
+                                          (when slime-repl-input-start-mark
+                                            (let ((start
+                                                    (marker-position slime-repl-input-start-mark)))
+                                              (when (> (point) start)
+                                                start)))
+                                          t))
       ;; don't add space after completion
       (let ((comint-completion-addsuffix '("/" . "")))
         (if slime-when-complete-filename-expand
@@ -262,29 +275,33 @@ most recently enclosed macro or function."
             ;; FIXME: use `comint-filename-completion' when dropping emacs23
             (funcall (if (>= emacs-major-version 24)
                          'comint-filename-completion
-                         'comint-dynamic-complete-as-filename))))
+                         'comint-dynamic-complete-as-filename)))
+        nil)
       (let* ((end (move-marker (make-marker) (slime-symbol-end-pos)))
              (beg (move-marker (make-marker) (slime-symbol-start-pos)))
              (prefix (buffer-substring-no-properties beg end)))
         (cl-destructuring-bind (completion-set interrupted-p)
                                (slime-fuzzy-completions prefix)
-                               (if (null completion-set)
-                                   (progn (slime-minibuffer-respecting-message
-                                           "Can't find completion for \"%s\"" prefix)
-                                          (ding)
-                                          (slime-fuzzy-done))
-                                   (goto-char end)
-                                   (cond ((slime-length= completion-set 1)
-                                          ;; insert completed string
-                                          (insert-and-inherit (caar completion-set))
-                                          (delete-region beg end)
-                                          (goto-char (+ beg (length (caar completion-set))))
-                                          (slime-minibuffer-respecting-message "Sole completion")
-                                          (slime-fuzzy-done))
-                                         ;; Incomplete
-                                         (t
-                                          (slime-fuzzy-choices-buffer completion-set interrupted-p
-                                                                      beg end))))))))
+                               (if slime-fuzzy-default-completion-ui
+                                   (cl-list* beg end 
+                                             (slime-format-completions completion-set))
+                                   (if (null completion-set)
+                                       (progn (slime-minibuffer-respecting-message
+                                               "Can't find completion for \"%s\"" prefix)
+                                              (ding)
+                                              (slime-fuzzy-done))
+                                       (goto-char end)
+                                       (cond ((slime-length= completion-set 1)
+                                              ;; insert completed string
+                                              (insert-and-inherit (caar completion-set))
+                                              (delete-region beg end)
+                                              (goto-char (+ beg (length (caar completion-set))))
+                                              (slime-minibuffer-respecting-message "Sole completion")
+                                              (slime-fuzzy-done))
+                                             ;; Incomplete
+                                             (t
+                                              (slime-fuzzy-choices-buffer completion-set interrupted-p
+                                                                          beg end)))))))))
 
 
 (defun slime-get-fuzzy-buffer ()
@@ -302,7 +319,7 @@ Flags: boundp fboundp generic-function class macro special-operator package
   "Inserts the completion object `completion' as a formatted
 completion choice into the current buffer, and mark it with the
 proper text properties."
-  (cl-destructuring-bind (symbol-name score chunks classification-string)
+  (cl-destructuring-bind (symbol-name classification-string _symbol chunks)
       completion
     (let ((start (point))
           (end))
@@ -316,9 +333,8 @@ proper text properties."
       (put-text-property start (point) 'mouse-face 'highlight)
       (dotimes (i (- max-length (- end start)))
         (insert " "))
-      (insert (format " %s %s\n"
-                      classification-string
-                      score))
+      (insert (format "  %s\n"
+                      classification-string))
       (put-text-property start (point) 'completion completion))))
 
 (defun slime-fuzzy-insert (text)
@@ -387,22 +403,16 @@ done."
       (dolist (completion completions)
         (setf max-length (max max-length (length (cl-first completion)))))
 
-      (insert "Completion:")
+      (insert "Completion")
       (dotimes (i (- max-length 10)) (insert " "))
-      ;;     Flags:   Score:
-      ;; ... -------  --------
-      ;;     bfgctmsp
-      (let* ((example-classification-string (cl-fourth (cl-first completions)))
-             (classification-length (length example-classification-string))
-             (spaces (- classification-length (length "Flags:"))))
-        (insert "Flags:")
-        (dotimes (i spaces) (insert " "))
-        (insert " Score:\n")
-        (dotimes (i max-length) (insert "-"))
-        (insert " ")
-        (dotimes (i classification-length) (insert "-"))
-        (insert " --------\n")
-        (setq slime-fuzzy-first (point)))
+      ;;     Flags
+      ;; ... -------
+      ;;     bfgctmspa
+      (insert "  Flags\n")
+      (dotimes (i max-length) (insert "-"))
+      (insert " ")
+      (insert " ---------\n")
+      (setq slime-fuzzy-first (point))
 
       (dolist (completion completions)
         (setq slime-fuzzy-last (point)) ; will eventually become the last entry
@@ -554,16 +564,21 @@ run."
 
 (defun slime-fuzzy-done ()
   "Cleans up after the completion process."
-  (when slime-fuzzy-target-buffer
-    (set-buffer slime-fuzzy-target-buffer)
-    (slime-fuzzy-disable-target-buffer-completions-mode)
-    (let ((window (get-buffer-window (slime-get-fuzzy-buffer))))
-      (when window
-        (quit-window nil window)))
-    (if (slime-minibuffer-p slime-fuzzy-target-buffer)
-        (select-window (minibuffer-window))
-        (pop-to-buffer slime-fuzzy-target-buffer))
-    (goto-char slime-fuzzy-end)
-    (setq slime-fuzzy-target-buffer nil)))
+  (cond ((buffer-live-p slime-fuzzy-target-buffer)
+         (set-buffer slime-fuzzy-target-buffer)
+         (slime-fuzzy-disable-target-buffer-completions-mode)
+         (let ((window (get-buffer-window (slime-get-fuzzy-buffer))))
+           (when window
+             (quit-window nil window)))
+         (if (slime-minibuffer-p slime-fuzzy-target-buffer)
+             (select-window (minibuffer-window))
+             (pop-to-buffer slime-fuzzy-target-buffer))
+         (goto-char slime-fuzzy-end)
+         (setq slime-fuzzy-target-buffer nil))
+        (t
+         (let ((buf "*Fuzzy Completions*"))
+           (when buf
+             (bury-buffer buf)))
+         (setq slime-fuzzy-target-buffer nil))))
 
 (provide 'slime-fuzzy)
