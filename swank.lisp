@@ -3870,8 +3870,6 @@ Collisions are caused because package information is ignored."
 
 (defmacro with-face ((&rest r &key &allow-other-keys) &body body)
   `(let ((*output-context* (append (list ',(intern "FACE" :swank-io-package)
-                                         (list ,@r)
-                                         ',(intern "FONT-LOCK-FACE" :swank-io-package)
                                          (list ,@r))
                                    *output-context*)))
      ,@body))
