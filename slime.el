@@ -3627,9 +3627,10 @@ more than one space."
                          (cl-remove-if-not #'fboundp slime-completion-at-point-functions)))
                    (run-hook-with-args-until-success
                     'slime-completion-at-point-functions))))))
-    (if (and slime-fuzzy-default-completion-ui
-             fun
-             (symbolp fun))
+    (if (and fun
+             (symbolp fun)
+             (or slime-fuzzy-default-completion-ui
+                 (not (eq fun 'slime-fuzzy-complete-symbol))))
         (funcall fun)
         fun)))
 
@@ -3949,7 +3950,7 @@ The result is a (possibly empty) list of definitions."
 
 (defmacro defslimefun (name arglist &rest body)
   "Define a function via `cl-defun' that can be invoked from SWANK."
-  (declare (indent 2))
+  (declare (indent defun))
   `(progn
      (put ',name 'slime-rpc t)
      (cl-defun ,name ,arglist ,@body)))
@@ -4544,8 +4545,11 @@ With prefix argument include internal symbols."
 (defun slime-info ()
   "Open Slime manual"
   (interactive)
-  (let ((file (expand-file-name "doc/slime.info" slime-path)))
-    (if (file-exists-p file)
+  (let ((file (seq-some (lambda (name)
+                          (let ((f (expand-file-name name slime-path)))
+                            (and (file-exists-p f) f)))
+                        '("doc/slime.info" "slime.info"))))
+    (if file
         (info file)
       (message "No slime.info, run `make slime.info' in %s"
                (expand-file-name "doc/" slime-path)))))
@@ -7521,10 +7525,7 @@ and skips comments."
     (slime-forward-cruft)
     (forward-sexp)))
 
-(defconst slime-reader-conditionals-regexp
-  ;; #!+, #!- are SBCL specific reader-conditional syntax.
-  ;; We need this for the source files of SBCL itself.
-  (regexp-opt '("#+" "#-" "#!+" "#!-")))
+(defconst slime-reader-conditionals-regexp (regexp-opt '("#+" "#-")))
 
 (defun slime-forward-reader-conditional ()
   "Move past any reader conditional (#+ or #-) at point."
