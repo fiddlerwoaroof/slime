@@ -294,7 +294,7 @@ TIME-LIMIT-IN-MSEC is NIL, an infinite time limit is assumed.")
      (map 'vector
           (lambda (system)
             (let ((dist-name (string-upcase (ql-dist:name system))))
-              (swank::make-fuzzy-matching (alexandria:make-keyword dist-name)
+              (swank::make-fuzzy-matching (intern dist-name "KEYWORD")
                                           ""
                                           (or (search (string-upcase search-string) dist-name)
                                               (length dist-name))
@@ -313,7 +313,7 @@ TIME-LIMIT-IN-MSEC is NIL, an infinite time limit is assumed.")
               (swank::make-fuzzy-matching (if (and (> (length string) 0)
                                                    (eql (elt string 0) #\#))
                                               (make-symbol dist-name)
-                                              (alexandria:make-keyword dist-name))
+                                              (intern dist-name "KEYWORD"))
                                           ""
                                           (or (search (string-upcase search-string) dist-name)
                                               (length dist-name))
