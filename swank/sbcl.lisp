@@ -50,7 +50,13 @@
      (let ((sym (find-symbol "META-INFO" "SB-C")))
        (and sym
             (fboundp sym)
-            (funcall sym :setf :inverse ()))))))
+            (funcall sym :setf :inverse ())))))
+
+  (defun sbcl-version>= (&rest subversions)
+    #+#.(swank/backend:with-symbol 'assert-version->= 'sb-ext)
+    (values (ignore-errors (apply #'sb-ext:assert-version->= subversions) t))
+    #-#.(swank/backend:with-symbol 'assert-version->= 'sb-ext)
+    nil))
 
 ;;; swank-mop
 
@@ -1329,19 +1335,15 @@ stack."
     (code-location-source-location
      (sb-di:frame-code-location (nth-frame index)))))
 
-(defvar *keep-non-valid-locals* nil)
-
 (defun frame-debug-vars (frame)
   "Return a vector of debug-variables in frame."
   (let* ((all-vars (sb-di::debug-fun-debug-vars (sb-di:frame-debug-fun frame)))
          (loc (sb-di:frame-code-location frame))
-         (vars (if *keep-non-valid-locals*
-                   all-vars
-                   (remove-if (lambda (var)
-                                (ecase (sb-di:debug-var-validity var loc)
-                                  (:valid nil)
-                                  ((:invalid :unknown) t)))
-                              all-vars)))
+         (vars (remove-if (lambda (var)
+                            (ecase (sb-di:debug-var-validity var loc)
+                              (:valid nil)
+                              ((:invalid :unknown) t)))
+                          all-vars))
          more-context
          more-count)
     (values (when vars
@@ -1980,12 +1982,6 @@ stack."
 
 ;;;; wrap interface implementation
 
-(defun sbcl-version>= (&rest subversions)
-  #+#.(swank/backend:with-symbol 'assert-version->= 'sb-ext)
-  (values (ignore-errors (apply #'sb-ext:assert-version->= subversions) t))
-  #-#.(swank/backend:with-symbol 'assert-version->= 'sb-ext)
-  nil)
-
 (defimplementation wrap (spec indicator &key before after replace)
   (when (wrapped-p spec indicator)
     (warn "~a already wrapped with indicator ~a, unwrapping first"
@@ -2047,11 +2043,16 @@ stack."
   (let ((sb-thread:*interrupt-handler* interrupt-handler))
     (funcall function)))
 
-(defimplementation lock-package (package)
-  (sb-ext:lock-package package))
-
-(defimplementation unlock-package (package)
-  (sb-ext:unlock-package package))
-
-(defimplementation expand-with-unlocked-packages (packages body)
-  `(sb-ext:with-unlocked-packages ,packages ,@body))
+#+#.(swank/backend:boolean-to-feature-expression (swank/sbcl::sbcl-version>= 2 5 10 1))
+(defimplementation install-special-backquote-readers (rt)
+  (set-macro-character #\` (lambda (s c)
+                             (declare (ignore c))
+                             (list 'backq (read s t nil t))) t rt)
+  (set-macro-character #\, (lambda (s c)
+                             (declare (ignore c))
+                             (let ((n (read-char s)))
+			       (case n
+				 ((#\. #\@))
+				 (t (unread-char n s)))
+			       (list 'comma (read s t nil t))))
+		       t rt))

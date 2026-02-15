@@ -46,9 +46,14 @@
        (t
         (let ((pt1 (point))
               (pt2 (condition-case e
-                       (progn (forward-sexp) (point))
-                     (scan-error
-                      (cl-fourth e)))))   ; end of sexp
+                                   (progn (forward-sexp) (point))
+                                   (scan-error
+                                    (let ((error-end (nth 3 e)))
+                                      (if (and todo
+                                               (>= error-end (car todo)))
+                                          ;; The error jumped out of the outer sexp
+                                          (1- (car todo))
+                                          error-end))))))
           (push (buffer-substring-no-properties pt1 pt2) cursexp)
           (push pt2 todo)
           (push cursexp sexps)))))
@@ -168,8 +173,8 @@ For other contexts we return the symbol at point."
            (backward-up-list 1)
            (slime-parse-context `(setf ,name)))
           ((slime-in-expression-p '(defmethod *))
-           (unless (looking-at "\\s ")
-             (forward-sexp 1)) ; skip over the methodname
+           (slime-beginning-of-list)
+           (forward-sexp 2)
            (let (qualifiers arglist)
              (cl-loop for e = (read (current-buffer))
                       until (listp e) do (push e qualifiers)
