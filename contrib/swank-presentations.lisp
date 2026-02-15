@@ -109,7 +109,8 @@ The secondary value indicates the absence of an entry."
                    (loop for i below (length string) by 10000
                          do (send-to-emacs `(:write-string ,(subseq string i (min (length string)
                                                                                   (+ i 10000)))
-                                             :repl-result)))
+                                             :repl-result
+                                             nil)))
 	                 (send-to-emacs `(:write-string ,string :repl-result nil))))
 	           (send-to-emacs `(:presentation-end ,id :repl-result))
 	           (send-to-emacs `(:write-string ,(string #\Newline)
@@ -120,6 +121,7 @@ The secondary value indicates the absence of an entry."
     (if (null values)
         (send-to-emacs `(:write-string "; No value" :repl-result nil))
         (mapc #'send values))))
+
 
 
 ;;;; Presentation menu protocol
