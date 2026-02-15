@@ -103,22 +103,25 @@ The secondary value indicates the absence of an entry."
   (flet ((send (value)
            (let ((id (and *record-repl-results*
                           (save-presented-object value))))
-	     (send-to-emacs `(:presentation-start ,id :repl-result))
+	           (send-to-emacs `(:presentation-start ,id :repl-result))
              (let ((string (prin1-to-string value)))
                (if (> (length string) 10000)
                    (loop for i below (length string) by 10000
                          do (send-to-emacs `(:write-string ,(subseq string i (min (length string)
                                                                                   (+ i 10000)))
-                                             :repl-result)))
-	           (send-to-emacs `(:write-string ,string :repl-result nil))))
-	     (send-to-emacs `(:presentation-end ,id :repl-result))
-	     (send-to-emacs `(:write-string ,(string #\Newline nil)
-			      :repl-result)))))
+                                             :repl-result
+                                             nil)))
+	                 (send-to-emacs `(:write-string ,string :repl-result nil))))
+	           (send-to-emacs `(:presentation-end ,id :repl-result))
+	           (send-to-emacs `(:write-string ,(string #\Newline)
+			                        :repl-result
+                              nil)))))
     (fresh-line)
     (really-finish-output *standard-output*)
     (if (null values)
         (send-to-emacs `(:write-string "; No value" :repl-result nil))
         (mapc #'send values))))
+
 
 
 ;;;; Presentation menu protocol
