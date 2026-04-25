@@ -47,7 +47,13 @@
     (sb-ext:*print-vector-length* . 200)
     (*print-lines*            . 1)
     (*print-right-margin*     . 200)
-    (*print-pprint-dispatch*  . ,*backtrace-pprint-dispatch-table*))
+    (*print-pprint-dispatch*  . ,*backtrace-pprint-dispatch-table*)
+    #+#.(swank/backend:with-symbol '*current-level-in-print* 'sb-kernel)
+    (sb-kernel:*current-level-in-print* . 0)
+    #+#.(swank/backend:with-symbol '*circularity-hash-table* 'sb-impl)
+    (sb-impl::*circularity-hash-table* . nil)
+    #+#.(swank/backend:with-symbol '*circularity-counter* 'sb-impl)
+    (sb-impl::*circularity-counter* . nil))
   "Pretter settings for printing backtraces.")
 
 (defvar *default-worker-thread-bindings* '()
@@ -1821,10 +1827,17 @@ last form."
     (with-retry-restart (:msg "Retry SLIME evaluation request.")
       (let ((form (read-from-string form)))
         (destructuring-bind (dv name &optional value doc) form
-          (declare (ignore value doc))
-          (assert (eq dv 'defvar))
-          (makunbound name)
-          (prin1-to-string (eval form)))))))
+          (declare (ignore doc))
+          (case dv
+            #+sbcl
+            (sb-ext:defglobal
+                (set name (eval value))
+                (prin1-to-string name))
+            (defvar
+              (makunbound name)
+              (prin1-to-string (eval form)))
+            (t
+              (eval form))))))))
 
 (defvar *swank-pprint-bindings*
   `((*print-pretty*   . t)
@@ -2120,6 +2133,7 @@ after Emacs causes a restart to be invoked."
                        *package*))
         (*sldb-level* (1+ *sldb-level*))
         (*print-readably* nil)
+        (*read-suppress* nil)
         (*sldb-stepping-p* nil))
     (force-user-output)
     (call-with-debugging-environment

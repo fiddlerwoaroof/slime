@@ -60,8 +60,8 @@
 (require 'cl-lib)
 
 (eval-and-compile
-  (if (< emacs-major-version 23)
-      (error "Slime requires an Emacs version of 23, or above")))
+  (if (< emacs-major-version 24)
+      (error "Slime requires an Emacs version of 24, or above")))
 
 (require 'hyperspec "lib/hyperspec")
 (require 'thingatpt)
@@ -170,6 +170,13 @@ debugger backtraces and apropos listings."
 This applies to the *inferior-lisp* buffer and the network connections."
   :type 'boolean
   :group 'slime-ui)
+
+(defcustom slime-close-old-connections nil
+  "Call `slime-disconnect-all' before connecting with `slime-connect'."
+  :type '(choice (const nil)
+          (const ask)
+          (const t))
+  :group 'slime-lisp)
 
 ;;;;; slime-lisp
 
@@ -433,7 +440,7 @@ PROPERTIES specifies any default face properties."
                   '(:inherit font-lock-variable-name-face))
   (local-value    "local variable values")
   (catch-tag      "catch tags"
-                  '(:inherit highlight)))
+                  '(:inherit font-lock-variable-name-face)))
 
 
 ;;;; Minor modes
@@ -748,6 +755,14 @@ corresponding values in the CDR of VALUE."
                                  ,struct-var)))))
                     slots)
          . ,body))))
+
+;;; A copy of static-if from emacs 30.2
+(defmacro slime-static-if (condition then-form &rest else-forms)
+  (declare (indent 2)
+           (debug (sexp sexp &rest sexp)))
+  (if (eval condition lexical-binding)
+      then-form
+      (cons 'progn else-forms)))
 
 ;;;;; Very-commonly-used functions
 
@@ -1118,9 +1133,12 @@ DIRECTORY change to this directory before starting the process.
                        nil nil '(slime-connect-port-history . 1)))
                      nil t))
   (slime-setup)
-  (when (and interactive-p
+  (when (and slime-close-old-connections
+             interactive-p
              slime-net-processes
-             (y-or-n-p "Close old connections first? "))
+             (if (eq slime-close-old-connections 'ask)
+                 (y-or-n-p "Close old connections first? ")
+                 t))
     (slime-disconnect-all))
   (message "Connecting to Swank on port %S.." port)
   (slime-setup-connection (apply 'slime-net-connect host port parameters)))
@@ -1494,9 +1512,11 @@ EVAL'd by Lisp."
                    (concat (slime-prin1-to-string sexp) "\n")
                    'utf-8-unix))
          (string (concat (slime-net-encode-length (length payload))
-                         payload)))
+                         payload))
+         (sender (or (process-get proc 'slime-net-send-function)
+                     #'process-send-string)))
     (slime-log-event sexp)
-    (process-send-string proc string)))
+    (funcall sender proc string)))
 
 (defun slime-safe-encoding-p (coding-system string)
   "Return true iff CODING-SYSTEM can safely encode STRING."
@@ -4129,7 +4149,9 @@ inserted in the current buffer."
 Use `slime-re-evaluate-defvar' if the from starts with '(defvar'"
   (interactive)
   (let ((form (slime-defun-at-point)))
-    (cond ((string-prefix-p "(defvar " form t)
+    (cond ((or (string-prefix-p "(defvar " form t)
+               (string-prefix-p "(defglobal " form t)
+               (string-prefix-p "(sb-ext:defglobal " form t))
            (slime-re-evaluate-defvar form))
           (t
            (slime-interactive-eval form)))))
@@ -4630,7 +4652,7 @@ source-location."
                       (slime-one-line-ify label))
                      (insert "\n"))))
   ;; Remove the final newline to prevent accidental window-scrolling
-  (backward-delete-char 1)
+  (delete-char -1)
   (insert " "))
 
 (defun slime-xref-next-line ()
@@ -5057,7 +5079,7 @@ This variable specifies both what was expanded and how.")
     (erase-buffer)
     (insert expansion)
     (goto-char (point-min))
-    (font-lock-fontify-buffer)))
+    (font-lock-ensure (point-min) (point-max))))
 
 (defun slime-create-macroexpansion-buffer ()
   (let ((name (slime-buffer-name :macroexpansion)))
@@ -5498,14 +5520,11 @@ If LEVEL isn't the same as in the buffer reinitialize the buffer."
               (t
                (sldb--mark-last-window (selected-window))
                ;; An interactive exit should restore configuration per
-               ;; `quit-window's protocol. FIXME: remove
-               ;; `previous-window' hack when dropping Emacs23 support
+               ;; `quit-window's protocol.
                (let ((previous-window (window-parameter (selected-window)
                                                         'sldb-restore)))
                  (quit-window t)
-                 (if (and (not (>= emacs-major-version 24))
-                          (window-live-p previous-window))
-                     (select-window previous-window)))))))))
+                 (select-window previous-window))))))))
 
 (defun sldb-close-step-buffer (buffer)
   (when (buffer-live-p buffer)
@@ -5890,15 +5909,18 @@ The details include local variable bindings and CATCH-tags."
                                    'sldb-detailed-frame-line-face))
         (let ((indent1 "      ")
               (indent2 "        "))
-          (insert indent1 (sldb-in-face section
-                            (if locals "Locals:" "[No Locals]")) "\n")
-          (sldb-insert-locals locals indent2 frame)
+          (when locals
+            (sldb-insert-locals locals indent2 frame))
           (when catches
-            (insert indent1 (sldb-in-face section "Catch-tags:") "\n")
+            (insert indent1 (sldb-in-face section "Catch tags") "\n")
             (dolist (tag catches)
               (slime-propertize-region `(catch-tag ,tag)
                 (insert indent2 (sldb-in-face catch-tag (format "%s" tag))
                         "\n"))))
+          (when (and (not catches)
+                     (not locals))
+            (insert indent1 (sldb-in-face detailed-frame-line
+                                          "[Nothing here]") "\n"))
           (setq end (point)))))
     (slime--display-region (point) end)))
 
@@ -6563,7 +6585,7 @@ KILL-BUFFER hooks for the inspector buffer."
                     'face 'slime-inspector-value-face)
             (insert title))
           (while (eq (char-before) ?\n)
-            (backward-delete-char 1))
+            (delete-char -1))
           (insert "\n" (fontify label "--------------------") "\n")
           (save-excursion
             (slime-inspector-insert-content content))
